@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 const backgroundpic = require("../../assets/images/back.png");
 
 const MOCK_DATA = [
-  { id: 1, title: "Нов ъпдейт на приложението!", body: "Версия 2.0 вече е налична с много нови функции и подобрения.", time: "18 часа", read: false },
+  { id: 1, title: "Нов ъпдейт на приложението!", body: "Версия 2.0 вече е налична с много нови функции и подобрения.", time: "преди 18 часа", read: false },
 ];
 
 export default function NotificationsScreen() {
