@@ -1,28 +1,41 @@
-import { View, StyleSheet, Text, ImageBackground, ScrollView, TouchableOpacity } from "react-native";
+import { View, StyleSheet, Text, ImageBackground, ScrollView, TouchableOpacity, DeviceEventEmitter } from "react-native";
 import React, { useState, useEffect } from 'react';
- 
+
 //TOVA E NOTIFICATIONS
 const backgroundpic = require("../../assets/images/back.png");
- 
-// izwestia koito shte se pokazwat ala oshte ne e gotovo za tva sega e fake data
+
 const MOCK_DATA = [
-  { id: 1, title: "Нов ъпдейт на приложението!", body: "Версия 2.0 вече е налична с много нови функции и подобрения.", time: "2 часа", read: false },
-]
+  { id: 1, title: "Нов ъпдейт на приложението!", body: "Версия 2.0 вече е налична с много нови функции и подобрения.", time: "18 часа", read: false },
+];
+
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState(MOCK_DATA);
- 
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('newNotification', (payload) => {
+      setNotifications(prev => [{
+        id: Date.now(),
+        title: payload.title,
+        body: payload.body,
+        time: 'Сега',
+        read: false,
+      }, ...prev]);
+    });
+    return () => sub.remove();
+  }, []);
+
   const markAsRead = (id: number) => {
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, read: true } : n)
     );
   };
- 
+
   const markAllRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
- 
+
   const unreadCount = notifications.filter(n => !n.read).length;
- 
+
   return (
     <ImageBackground source={backgroundpic} style={styles.background}>
       <View style={styles.header}>
@@ -33,13 +46,13 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         )}
       </View>
- 
+
       {unreadCount > 0 && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{unreadCount} непрочетени</Text>
         </View>
       )}
- 
+
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
         {notifications.map(n => (
           <TouchableOpacity
@@ -49,7 +62,7 @@ export default function NotificationsScreen() {
             activeOpacity={0.8}
           >
             {!n.read && <View style={styles.dot} />}
- 
+
             <View style={styles.cardContent}>
               <Text style={[styles.cardTitle, !n.read && styles.cardTitleUnread]}>
                 {n.title}
@@ -59,13 +72,13 @@ export default function NotificationsScreen() {
             </View>
           </TouchableOpacity>
         ))}
- 
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </ImageBackground>
   );
 }
- 
+
 const styles = StyleSheet.create({
   background: {
     flex: 1,
@@ -156,4 +169,3 @@ const styles = StyleSheet.create({
     color: "#999",
   },
 });
- 

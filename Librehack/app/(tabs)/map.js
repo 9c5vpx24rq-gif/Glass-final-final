@@ -15,6 +15,9 @@ const citiesMed = require('../../data/cities-med.json');
 const schoolsBurgas = require('../../data/schools-burgas.json');
 
 const PANEL_HEIGHT = 400;
+const SERVER_IP = "10.195.69.242";
+const SERVER_PORT = 5000;
+
 const BULGARIA_CENTER = {
   latitude: 42.73,
   longitude: 25.48,
@@ -53,15 +56,16 @@ function getAllSchoolCoordinates(data) {
   for (const oblast in data) {
     for (const townName in data[oblast]) {
       const town = data[oblast][townName];
-      for (const school of town.училища ?? []) {
-        if (school.coordinates) {
+      for (const schoolName in town) {
+        const school = town[schoolName];
+        if (school.lat && school.lng) {
           points.push({
-            id: `${townName}-${school.name}`,
-            name: school.name,
+            id: `${townName}-${schoolName}`,
+            name: schoolName,
             oblast,
-            latitude: school.coordinates.lat,
-            longitude: school.coordinates.lng,
-            information: school.information,
+            latitude: school.lat,
+            longitude: school.lng,
+            information: school.information || '',
           });
         }
       }
@@ -90,13 +94,14 @@ const POINTS_BY_MODE = {
 export default function HomeScreen() {
   const map_ref = useRef(null);
   const [activeMarkers, setActiveMarkers] = useState(null);
-
   const [region, setRegion] = useState(BULGARIA_CENTER);
 
   const [selectedCity, setSelectedCity] = useState(null);
   const [votedOrange, setVotedOrange] = useState(false);
   const [votedRed, setVotedRed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [voteLoading, setVoteLoading] = useState(false);
+
   const translateY = useRef(new Animated.Value(PANEL_HEIGHT)).current;
   const drawerX = useRef(new Animated.Value(300)).current;
   const isDrawerOpenRef = useRef(false);
@@ -132,6 +137,7 @@ export default function HomeScreen() {
     });
     setVotedOrange(false);
     setVotedRed(false);
+    setVoteLoading(false);
     Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
   };
 
@@ -142,16 +148,12 @@ export default function HomeScreen() {
 
   // ─── Vote ─────────────────────────────────────────────────────────────────
   const handleVote = async (button) => {
-    if (button === 'orange' && votedOrange) return;
-    if (button === 'red' && votedRed) return;
+    if ((button === 'orange' && votedOrange) || (button === 'red' && votedRed)) return;
+    if (voteLoading) return;
+
+    setVoteLoading(true);
     try {
-      // In handleVote, before the fetch:
-console.log("Sending vote:", {
-  cityName: selectedCity.name,
-  mode: selectedCity.mode,
-  button,
-});
-      const response = await fetch("http://192.168.1.39:5000/app/vote", {
+      const response = await fetch(`http://${SERVER_IP}:${SERVER_PORT}/app/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,15 +162,21 @@ console.log("Sending vote:", {
           button,
         }),
       });
+
       const data = await response.json();
+
       if (data.success) {
         if (button === 'orange') setVotedOrange(true);
-        else setVotedRed(true);
+        else if (button === 'red') setVotedRed(true);
       } else {
-        console.log("Vote failed:", data.message);
+        console.error("Vote failed:", data.message);
+        alert(`Гласуването не се регистрира: ${data.message}`);
       }
     } catch (err) {
-      console.log("Vote error:", err.message);
+      console.error("Vote error:", err.message);
+      alert(`Грешка при гласуване: ${err.message}`);
+    } finally {
+      setVoteLoading(false);
     }
   };
 
@@ -190,7 +198,7 @@ console.log("Sending vote:", {
   const handleReport = async () => {
     if (reportSent || !reportText.trim()) return;
     try {
-      const response = await fetch("http://192.168.1.39:5000/app/report", {
+      const response = await fetch(`http://${SERVER_IP}:${SERVER_PORT}/app/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,10 +212,12 @@ console.log("Sending vote:", {
         setReportSent(true);
         setTimeout(closeReportPanel, 1500);
       } else {
-        console.log("Report failed:", data.message);
+        console.error("Report failed:", data.message);
+        alert(`Докладът не се изпрати: ${data.message}`);
       }
     } catch (err) {
-      console.log("Report error:", err.message);
+      console.error("Report error:", err.message);
+      alert(`Грешка при докладване: ${err.message}`);
     }
   };
 
@@ -236,8 +246,8 @@ console.log("Sending vote:", {
     return () => { drawerSub.remove(); searchSub.remove(); };
   }, []);
 
-  // ─── Bounds check ──────────────────────────────────────────────────────────
-  const clampRegion = (r) => {
+  // ─── Bounds check — runs only after drag ends ──────────────────────────────
+  const handleRegionChangeComplete = (r) => {
     const clampedLat = Math.max(
       BULGARIA_BOUNDS.minLat + r.latitudeDelta / 2,
       Math.min(BULGARIA_BOUNDS.maxLat - r.latitudeDelta / 2, r.latitude)
@@ -246,7 +256,13 @@ console.log("Sending vote:", {
       BULGARIA_BOUNDS.minLng + r.longitudeDelta / 2,
       Math.min(BULGARIA_BOUNDS.maxLng - r.longitudeDelta / 2, r.longitude)
     );
-    setRegion({ ...r, latitude: clampedLat, longitude: clampedLng });
+
+    if (clampedLat !== r.latitude || clampedLng !== r.longitude) {
+      map_ref.current?.animateToRegion(
+        { ...r, latitude: clampedLat, longitude: clampedLng },
+        150
+      );
+    }
   };
 
   // ─── Swipe-to-close for city panel ────────────────────────────────────────
@@ -267,9 +283,9 @@ console.log("Sending vote:", {
       <MapView
         ref={map_ref}
         style={styles.map}
-        region={region}
+        initialRegion={BULGARIA_CENTER}
         minZoomLevel={7}
-        onRegionChange={clampRegion}
+        onRegionChangeComplete={handleRegionChangeComplete}
         onPress={handleMapPress}
         onLongPress={(e) => openReportPanel(e.nativeEvent.coordinate)}
       >
@@ -306,18 +322,18 @@ console.log("Sending vote:", {
             <Text style={styles.oblastName}>{selectedCity.oblast}</Text>
             <Text style={styles.information}>{selectedCity.information}</Text>
 
-            {/* Vote buttons — only show when a marker mode is active */}
-                {selectedCity && (
-      <TouchableOpacity
-  style={[styles.brownVoteBtn, votedOrange && { backgroundColor: '#3a1a0a' }]}
-  onPress={() => handleVote('orange')}
-  disabled={votedOrange}
->
-  <Text style={styles.brownVoteBtnText}>
-    {votedOrange ? '✓ Гласувано' : 'Гласувай'}
-  </Text>
-</TouchableOpacity>
-)}
+            {/* Vote button */}
+            <View style={styles.voteButtonContainer}>
+              <TouchableOpacity
+                style={styles.brownVoteBtn}
+                onPress={() => handleVote('orange')}
+                disabled={votedOrange || voteLoading}
+              >
+                <Text style={styles.brownVoteBtnText}>
+      
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity onPress={closePanel} style={styles.closeButton} />
           </ImageBackground>
@@ -376,23 +392,6 @@ console.log("Sending vote:", {
 }
 
 const styles = StyleSheet.create({
-  brownVoteBtn: {
-  position: 'absolute',
-  bottom: 40,
-  left: 20,
-  width: 100,
-  height: 100,
-  borderRadius: 12,
-  backgroundColor: '#6B3A2A',
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-brownVoteBtnText: {
-  color: 'white',
-  fontWeight: '700',
-  fontSize: 15,
-  textAlign: 'center',
-},
   container: { flex: 1 },
   map: {
     width: Dimensions.get('window').width,
@@ -454,22 +453,29 @@ brownVoteBtnText: {
     width: 70, height: 70,
     borderRadius: 10,
   },
-  voteButtonRow: {
+
+  voteButtonContainer: {
     position: 'absolute',
-    bottom: 40,
-    left: 20, right: 20,
-    flexDirection: 'row',
-    gap: 10,
+    top: 40,
+    left: 20,
+    right: 20,
   },
-  voteBtn: {
-    flex: 1,
+  brownVoteBtn: {
+    position: "absolute",
+    top: 50, right: 45,
+    backgroundColor: '',
+    height: 60,
+    width: '50%',
     padding: 14,
     borderRadius: 10,
     alignItems: 'center',
   },
-  voteBtnOrange: { backgroundColor: '#e07820' },
-  voteBtnRed:    { backgroundColor: '#e05c5c' },
-  voteBtnText:   { color: 'white', fontWeight: '600', fontSize: 15 },
+  brownVoteBtnText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 16,
+    textAlign: 'center',
+  },
 
   // ─── Report panel ──────────────────────────────────────────────────────────
   reportPanelInner: {
