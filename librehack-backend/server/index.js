@@ -3,32 +3,36 @@ const app = express();
 const cors = require("cors");
 const pool = require("./db");
 
+app.use(cors());
+app.use(express.json());
+
 process.on('uncaughtException', (err) => {
   console.log('Uncaught error:', err.message);
 });
 
-app.use(cors());
-app.use(express.json());
-
-// INSERT new user
-app.post("/app/login", async (req, res) => {
-  console.log("Request received:", req.body);
+// ─── Register ────────────────────────────────────────────────────────────────
+app.get("/app/register", async (req, res) => {
   try {
-    const { username, email, password } = req.body;
-    const newuser = await pool.query(
+    const { username, email, password } = req.query;
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE email=$1", [email]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({ success: false, message: "Имейлът вече съществува" });
+    }
+    const result = await pool.query(
       "INSERT INTO users(name, email, password) VALUES($1, $2, $3) RETURNING *",
       [username, email, password]
     );
-    res.json(newuser.rows[0]);
-    console.log(newuser.rows[0]);
+    res.json({ success: true, user: result.rows[0] });
   } catch (err) {
     console.log(err.message);
+    res.json({ success: false, message: "Грешка при регистрация" });
   }
 });
 
-// GET / check login
+// ─── Login ───────────────────────────────────────────────────────────────────
 app.get("/app/login", async (req, res) => {
-  console.log("Login attempt:", req.query);
   try {
     const { username, password } = req.query;
     const result = await pool.query(
@@ -38,28 +42,63 @@ app.get("/app/login", async (req, res) => {
     if (result.rows.length > 0) {
       res.json({ success: true, user: result.rows[0] });
     } else {
-      res.json({ success: false, message: "Invalid username or password" });
+      res.json({ success: false, message: "Невалидно потребителско име или парола" });
     }
   } catch (err) {
     console.log(err.message);
+    res.json({ success: false, message: err.message });
   }
 });
 
-// VOTE
-// VOTE
+// ─── Delete user ─────────────────────────────────────────────────────────────
+app.delete("/app/deleteuser", async (req, res) => {
+  try {
+    const { username } = req.query;
+    await pool.query("DELETE FROM users WHERE name=$1", [username]);
+    res.json({ success: true });
+  } catch (err) {
+    console.log(err.message);
+    res.json({ success: false });
+  }
+});
+
+// ─── Vote ─────────────────────────────────────────────────────────────────────
+// mode:   'schools' | 'hospitals'
+// button: 'orange'  | 'red'
+// Mapping:
+//   schools + orange  → votes_schools
+//   schools + red     → votes_noschools
+//   hospitals + orange → votes_hospitals
+//   hospitals + red   → votes_nohospitals
+
+const VOTE_TABLES = {
+  schools_orange:   'votes_schools',
+  schools_red:      'votes_noschools',
+  hospitals_orange: 'votes_hospitals',
+  hospitals_red:    'votes_nohospitals',
+};
+
 app.post("/app/vote", async (req, res) => {
   try {
-    const { cityName } = req.body;
-    console.log("Vote received for:", cityName);
+    const { cityName, mode, button } = req.body;
+    console.log("Vote received:", { cityName, mode, button });
+
+    const key = `${mode}_${button}`;
+    const table = VOTE_TABLES[key];
+    console.log("Table selected:", table);
+    console.log("City name bytes:", Buffer.from(cityName).toString('hex'));
+
+    if (!table) {
+      return res.json({ success: false, message: `Invalid mode/button combo: ${key}` });
+    }
 
     const result = await pool.query(
-      "UPDATE votes SET votes = votes + 1 WHERE name=$1 RETURNING *",
+      `INSERT INTO ${table} (city, votes)
+       VALUES ($1, 1)
+       ON CONFLICT (city) DO UPDATE SET votes = ${table}.votes + 1
+       RETURNING *`,
       [cityName]
     );
-
-    if (result.rows.length === 0) {
-      return res.json({ success: false, message: "City not found in votes table" });
-    }
 
     res.json({ success: true, votes: result.rows[0].votes });
   } catch (err) {
@@ -67,8 +106,25 @@ app.post("/app/vote", async (req, res) => {
     res.json({ success: false, message: err.message });
   }
 });
-
+// ─── Report ───────────────────────────────────────────────────────────────────
+app.post("/app/report", async (req, res) => {
+  try {
+    console.log("Report received:", req.body);
+    const { latitude, longitude, reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.json({ success: false, message: "Reason is required" });
+    }
+    await pool.query(
+      "INSERT INTO reports(latitude, longitude, reason) VALUES($1, $2, $3)",
+      [latitude, longitude, reason]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.log(err.message);
+    res.json({ success: false, message: err.message });
+  }
+});
 
 app.listen(5000, () => {
-  console.log("server has started on port 5000");
+  console.log("Server started on port 5000");
 });

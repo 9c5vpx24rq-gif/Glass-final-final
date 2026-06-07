@@ -72,11 +72,11 @@ export default function SignupScreen() {
       const data = await response.json();
 
       if (data.success) {
-        Alert.alert('Успех', 'Профилът е създаден!', [
-          { text: 'Вход', onPress: () => router.replace('../(tabs)/map') }
-        ]);
-        setName(''); setEmail(''); setPassword('');
-      } else {
+      Alert.alert('Успех', 'Профилът е създаден!', [
+        { text: 'Вход', onPress: () => router.replace('/(tabs)/map') }
+      ]);
+      setName(''); setEmail(''); setPassword('');
+    } else {
         Alert.alert('Грешка', data.message || 'Грешка при регистрация.');
       }
 
@@ -87,6 +87,8 @@ export default function SignupScreen() {
     }
   };
 
+
+  
   return (
     <View style={styles.container}>
       <ImageBackground source={backgroundpic} style={styles.background}>

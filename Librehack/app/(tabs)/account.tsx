@@ -61,21 +61,30 @@ export default function HomeScreen() {
     ]);
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert("Изтрий акаунта", "Изтриването на акаунта е необратимо. Сигурни ли сте?", [
-      { text: "Отказ", style: "cancel" },
-      {
-        text: "Изтрий",
-        style: "destructive",
-        onPress: async () => {
-          // your delete account API call here
-          await AsyncStorage.multiRemove(['userToken', 'userData', 'userName', 'userEmail']);
-          router.replace("../index-1");
-        },
-      },
-    ]);
-  };
-
+const handleDeleteAccount = () => {
+  Alert.alert("Изтрий акаунта", "Изтриването на акаунта е необратимо. Сигурни ли сте?", [
+    { text: "Отказ", style: "cancel" },
+    {
+      text: "Изтрий",
+      style: "destructive",
+      onPress: async () => {
+  console.log("Deleting user:", username); // add this
+  try {
+    const response = await fetch(
+      `http://10.195.69.242:5000/app/deleteuser?username=${encodeURIComponent(username)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+    console.log("Delete response:", data); // add this
+  } catch (err) {
+    console.error(err);
+  }
+  await AsyncStorage.multiRemove(['userToken', 'userData', 'userName', 'userEmail']);
+  router.replace("../index-1");
+},
+    },
+  ]);
+};
   return (
     <ImageBackground source={backgroundpic} style={styles.back}>
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />

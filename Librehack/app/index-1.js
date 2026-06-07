@@ -2,16 +2,18 @@ import {View , StyleSheet , Text, TextInput , ImageBackground} from "react-nativ
 import { router } from "expo-router";
 import React, { Component } from 'react'
 import { Button } from "@react-navigation/elements";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 //TOVA E LOG IN
 const backgroundpic = require("../assets/images/log-in-back.png");
 
 export default function LoginScreen() {
     const [username , secusername ] = React.useState('');
     const [password , secpassword ] = React.useState('');
+
    const buttonsend = async () => {
   try {
     const response = await fetch(
-      `http://172.20.10.11:5000/app/login?username=${username}&password=${password}`,
+      `http://10.195.69.242:5000/app/login?username=${username}&password=${password}`,
       {
         method: "GET",
         headers: {
@@ -21,8 +23,9 @@ export default function LoginScreen() {
     );
     const data = await response.json();
     if (data.success) {
-      router.push("/(tabs)/map"); 
-      
+      await AsyncStorage.setItem('userName', username);
+      await AsyncStorage.setItem('userData', JSON.stringify(data.user));
+      router.push("/(tabs)/map");
     } else {
       alert("Грешна парола/имейл");
     }
@@ -34,7 +37,7 @@ export default function LoginScreen() {
     return(
     <ImageBackground source={backgroundpic} style={styles.background}>
             <TextInput value={username}  onChangeText={secusername} style={styles.input} placeholderTextColor="#888" placeholder="Прякор"></TextInput>
-            <TextInput value={password} onChangeText={secpassword} style={styles.input2} placeholder="Парола"></TextInput>
+            <TextInput value={password} onChangeText={secpassword} style={styles.input2} placeholderTextColor="#888" placeholder="Парола" secureTextEntry></TextInput>
             <Button onPressIn={buttonsend} style={styles.vhod}><Text style={styles.vhod1}>Вход</Text></Button>
             <Button style={styles.loginbut}  onPressIn={() => router.replace("/")}></Button>
     </ImageBackground>
